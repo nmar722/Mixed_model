@@ -1,0 +1,271 @@
+---
+title: "Mixed Models"
+author: "M. Naoumkina"
+format:
+  html:
+    toc: true
+    toc-depth: 3 
+    toc-location: left
+    number-sections: true
+    code-fold: true
+    code-tools: true
+    df-print: paged       # Controls how data frames are printed
+    echo: true            # Show code chunks
+    code-overflow: wrap   # Prevent horizontal scrolling
+editor: visual
+execute:
+  echo: true              # Show code by default
+  warning: false          # Suppress warnings
+  message: false          # Suppress messages
+  output: inline          # Inline output for short results
+---
+
+```{r chunk_setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  comment = "",             # Fixed here
+  autodep = FALSE,
+  eval = TRUE,
+  cache.rebuild = FALSE,
+  cache = TRUE,
+  R.options = list(width = 120),
+  fig.width = 8,
+  fig.align = 'center',
+  dev.args = list(bg = 'transparent'),
+  dev = 'svglite'
+)
+```
+
+# Mixed Models
+
+## Example: Student GPA
+
+Load up and inspect the data.
+
+```{r basic_packages}
+library(tidyverse)
+```
+
+```{r load_gpa_data}
+load("gpa.RData")
+gpa
+```
+
+# Application
+
+## Standard Regression
+
+We'll start with a standard linear regression model. We have coefficients for the intercept and the effect of time, and in addition, the variance of the observations (residual standard error).
+
+```{r gpa_lm}
+gpa_lm = lm(gpa ~ occasion, data=gpa)
+summary(gpa_lm)
+```
+
+## Mixed Model
+
+```{r gpa_mixed, message=FALSE, warning=FALSE}
+library(lme4)
+gpa_mixed = lmer(gpa ~ occasion + (1|student), data=gpa)
+summary(gpa_mixed)
+```
+
+\[As a test, replace `1|student` with `1|sample(1:10, 1200, replace = T)`. As your variance due to arbitrary grouping is essentially 0, the residual error estimate is similar to the `lm` model.\]
+
+People always ask where the p-values are, but the answer is... complicated. Other packages and programs present them as if they are trivially obtained, but that is not the case, and the `lme4` developers would rather not make unnecessary assumptions. On the plus side, you can get interval estimates easily enough, even though they are poorly named for the variance components. `sigma01` is the student variance.
+
+Confidence intervals
+
+```{r gpa_mixed_confint}
+confint(gpa_mixed)
+```
+
+## Estimated Random Effects
+
+Now examine the random effects.
+
+```{r gpa_mixed_ranef}
+ranef(gpa_mixed)$student
+```
+
+```{r gpa_mixed_rancoef}
+coef(gpa_mixed)$student 
+```
+
+As we didn't allow the occasion effect to vary, it is constant. We'll change this later.
+
+## Prediction
+
+```{r gpa_mixed_predictions}
+predict(gpa_mixed, re.form=NA) %>% head
+```
+
+# Exercises
+
+## Sleep
+
+For this exercise, we'll use the sleep study data from the `lme4` package. The following describes it.
+
+> The average reaction time per day for subjects in a sleep deprivation study. On day 0, the subjects had their normal amount of sleep. Starting that night, they were restricted to 3 hours of sleep per night. The observations represent the average reaction time (in milliseconds) on a series of tests given each day to each subject.
+
+After loading the package, the data can be loaded as follows. I show the first few observations.
+
+```{r sleepstudy}
+library(lme4)
+data("sleepstudy")
+head(sleepstudy)
+```
+
+1.  Run a regression with Reaction as the target variable and Days as the predictor.
+
+```{r sleepstudy_lm}
+sleepstudy_lm = lm(Reaction ~ Days, data=sleepstudy)
+summary(sleepstudy_lm)
+```
+
+2.  Run a mixed model with a random intercept for Subject.
+
+```{r sleepstudy_mixed}
+sleepstudy_mixed = lmer(Reaction ~ Days + (1|Subject), data=sleepstudy)
+summary(sleepstudy_mixed)
+```
+
+3.  Interpret the variance components and fixed effects.
+
+```{r}
+confint(sleepstudy_mixed)
+```
+
+```{r}
+ranef(sleepstudy_mixed)$Subject
+```
+
+4.  What would a plot of the prediction lines per student look like relative to the overall trend?
+
+```{r}
+res <- resid(gpa_mixed)
+fit <- fitted(gpa_mixed)
+```
+
+```{r}
+# Residuals vs Fitted plot
+plot(fit, res,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     main = "Residuals vs Fitted")
+abline(h = 0, col = "red", lty = 2)
+```
+
+```{r}
+# QQ plot for residuals (normality check)
+qqnorm(res, main = "QQ Plot of Residuals")
+qqline(res, col = "red", lty = 2)
+```
+
+## Cluster level covariate
+
+Rerun the mixed model with the GPA data adding the cluster level covariate of `sex`, or high school GPA (`highgpa`), or both. Interpret all aspects of the results.
+
+```{r gpa_cluster}
+gpa_mixed_cluster_level = lmer(gpa ~ sex + occas + (1|student), data=gpa)
+
+summary(gpa_mixed_cluster_level)
+```
+
+```{r plot_GPA_trajectories}
+# Load required packages
+library(lme4)
+library(emmeans)
+library(ggplot2)
+
+# Fit your model
+gpa_mixed_cluster_level <- lmer(gpa ~ sex + occas + (1|student), data = gpa)
+
+# Get predicted marginal means for each sex × semester occasion
+emm <- emmeans(gpa_mixed_cluster_level, ~ sex | occas)
+
+# Convert to data frame for plotting
+emm_df <- as.data.frame(emm)
+
+# Plot trajectories
+ggplot(emm_df, aes(x = occas, y = emmean, color = sex, group = sex)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(ymin = emmean - SE, ymax = emmean + SE), width = 0.1) +
+  labs(
+    title = "Predicted GPA Trajectories by Sex Across Semesters",
+    x = "Semester Occasion",
+    y = "Predicted GPA"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+## Simulation
+
+The following represents a simple way to simulate a random intercepts model. Note each object what each object is, and make sure the code make sense to you. Then run it.
+
+```{r simMixed}
+set.seed(1234)  # this will allow you to exactly duplicate your result
+Ngroups = 100
+NperGroup = 3
+N = Ngroups * NperGroup
+groups = factor(rep(1:Ngroups, each = NperGroup))
+u = rnorm(Ngroups, sd = .5)
+e = rnorm(N, sd = .25)
+x = rnorm(N)
+y = 2 + .5 * x + u[groups] + e
+
+d = data.frame(x, y, groups)
+```
+
+Which of the above represent the fixed and random effects? Now run the following.
+
+```{r simMixed2}
+model = lmer(y ~ x + (1|groups), data=d)
+summary(model)
+confint(model)
+
+
+
+library(ggplot2)
+ggplot(aes(x, y), data=d) +
+  geom_point()
+```
+
+Do the results seem in keeping with what you expect?
+
+In what follows we'll change various aspects of the data, then rerun the model after each change, then summarize and get confidence intervals as before. For each note specifically at least one thing that changed in the results.
+
+0.  First calculate or simply eyeball the Intraclass Correlation Coefficient (ICC):
+
+$$\frac{\textrm{random effect variance}}{\textrm{residual + random effect variance}}$$
+
+In addition, create a density plot of the random effects as follows.
+
+```{r simMixed3}
+re <- ranef(model)$groups # random intercepts for 'groups'
+head(re)
+
+library(ggplot2)
+
+ggplot(re, aes(x = `(Intercept)`)) +
+  geom_density(fill = "skyblue", alpha = 0.5) +
+  labs(title = "Density of Random Intercepts",
+       x = "Random Intercept Estimate",
+       y = "Density") +
+  theme_minimal()
+```
+
+1.  Change the random effect variance/sd and/or the residual variance/sd and note your new estimate of the ICC, and plot the random effect as before.
+
+2.  Reset the values to the original. Change [Ngroups]{.objclass} to 50. What differences do you see in the confidence interval estimates?
+
+3.  Set the Ngroups back to 100. Now change [NperGroup]{.objclass} to 10, and note again the how the CI is different from the base condition.
+
+```{r}
+sessionInfo()
+```
