@@ -12,6 +12,8 @@ format:
     df-print: paged       # Controls how data frames are printed
     echo: true            # Show code chunks
     code-overflow: wrap   # Prevent horizontal scrolling
+    embed-resources: true
+    self-contained: true
 editor: visual
 execute:
   echo: true              # Show code by default
@@ -26,15 +28,12 @@ knitr::opts_chunk$set(
   message = FALSE,
   warning = FALSE,
   comment = "",             # Fixed here
-  autodep = FALSE,
   eval = TRUE,
-  cache.rebuild = FALSE,
-  cache = TRUE,
-  R.options = list(width = 120),
+  cache = FALSE, # Disable cache for portability
   fig.width = 8,
   fig.align = 'center',
-  dev.args = list(bg = 'transparent'),
-  dev = 'svglite'
+  dev = 'png', # Embed PNG in HTML
+  R.options = list(width = 120)
 )
 ```
 

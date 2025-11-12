@@ -1,5 +1,7 @@
 # Mixed_model
 
+Link to the [Quarto web page](https://nmar722.github.io/Mixed_model/)
+
 ## Quick Guide: Switch an Existing Repo from HTTPS to SSH
 
 1. Check current remote URL:
